@@ -47,7 +47,7 @@ This PowerShell script is designed to gather and display comprehensive informati
 *   **BIOS Reboot (Conditional):**
     *   If Secure Boot is disabled and the script is run with Administrator rights, it offers to reboot directly into the BIOS/UEFI settings.
 
-## How to Use
+
 
 ### Prerequisites
 
@@ -56,12 +56,11 @@ This PowerShell script is designed to gather and display comprehensive informati
 *   **Administrator Rights (Optional but Recommended):**  While the script will run without administrator privileges, some features (like Secure Boot and TPM status, Device Manager access, and BIOS reboot) require administrator rights to function correctly. Running the script as an administrator will provide the most complete information.
 
 1.  **Run the Script:**
-    *   In PowerShell, type the following command and press Enter:
+    *   In an *elevated* terminal(ctrl+shift click), type the following command and press Enter:
         ```powershell
-        .\Get-SystemInfo.ps1
+        powershell.exe -ExecutionPolicy Bypass -File "D:\Tools\1CheckLaptop.ps1"
         ```
-        *   The `.\` is important as it tells PowerShell to execute the script in the current directory.
-
+*	Or use / modify the shortcut in the repo
 ---
 
 
