@@ -90,7 +90,40 @@ function Get-SystemHardwareInfo {
         }
     }
 
+    # --- Retrieve Microphone Information with multiple fallback methods ---
+    try {
+        $microphoneFound = $false
+        
+        # Method 1: Check using Win32_PnPEntity
+        if (-not $microphoneFound) {
+            $mic = Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction Stop |
+                   Where-Object { $_.Name -match "Microphone|mic" -or $_.PNPClass -eq "AudioEndpoint" } |
+                   Select-Object -First 1
+            if ($mic) {
+                $systemInfo.MicrophoneDetection = $mic.Name
+                $microphoneFound = $true
+            }
+        }
 
+        # Method 2: Check using Win32_SoundDevice
+        if (-not $microphoneFound) {
+            $mic = Get-CimInstance -ClassName Win32_SoundDevice -ErrorAction Stop |
+                   Where-Object { $_.Name -match "Microphone|mic" } |
+                   Select-Object -First 1
+            if ($mic) {
+                $systemInfo.MicrophoneDetection = $mic.Name
+                $microphoneFound = $true
+            }
+        }
+
+        if (-not $microphoneFound) {
+            $systemInfo.MicrophoneDetection = "Not Detected"
+        }
+    }
+    catch {
+        Write-Verbose "All microphone detection methods failed: $_"
+        $systemInfo.MicrophoneDetection = "Detection Failed"
+    }
 
     # --- Retrieve Screen Size in Inches ---
     # Primary method: use WmiMonitorBasicDisplayParams from root\wmi
@@ -236,6 +269,7 @@ Write-Host "Screen Size: " -NoNewline -ForegroundColor White; Write-Host $($info
 Write-Host "Processor: " -NoNewline -ForegroundColor White; Write-Host $($info.Processor) -ForegroundColor Yellow
 Write-Host "Total RAM (GB): " -NoNewline -ForegroundColor White; Write-Host $($info.TotalRAMGB) -ForegroundColor Yellow
 Write-Host "Network Link Speed: " -NoNewline -ForegroundColor White; Write-Host $($info.NetworkLinkSpeed) -ForegroundColor Yellow
+Write-Host "Microphone: " -NoNewline -ForegroundColor White; Write-Host $($info.MicrophoneDetection) -ForegroundColor Yellow
 # Check Default Audio Devices 
 Write-Host "`n================ Audio Devices ================" -ForegroundColor Cyan
 Write-Host "Speakers: " -ForegroundColor White -NoNewline; (Get-CimInstance Win32_SoundDevice | Where-Object { $_.Status -eq "OK" }).Name
@@ -295,8 +329,6 @@ Write-Host "Speakers: " -ForegroundColor White -NoNewline; (Get-CimInstance Win3
  # eConsole = 0, eMultimedia = 1, eCommunications = 2
  # Use realEnumerator to get the default audio endpoint
  $result = $realEnumerator.GetDefaultAudioEndpoint(1, 0, [ref]$device)
-
-            
             if ($result -eq 0 -and $device) {
                 $systemInfo.MicrophoneDetection = "Default Microphone Device Found"
                 $microphoneFound = $true
