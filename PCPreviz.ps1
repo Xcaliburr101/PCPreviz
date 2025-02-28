@@ -140,7 +140,7 @@ $jobScripts = @{
             # --- Retrieve Microphone Information ---
             try {
                 $microphoneFound = $false
-                
+
                 # Method 1: Check using Win32_PnPEntity
                 if (-not $microphoneFound) {
                     $mic = Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction Stop |
@@ -190,13 +190,13 @@ $jobScripts = @{
 
                 foreach ($adapter in $networkAdapters) {
                     if ($adapter.InterfaceDescription -match 'Tailscale|VPN|Virtual') { continue }
-                    
+
                     $speed = if ($adapter.LinkSpeed -match 'Gbps') {
                         [double]($adapter.LinkSpeed -replace '[^0-9.]',[string]::Empty) * 1000
                     } else {
                         [double]($adapter.LinkSpeed -replace '[^0-9.]',[string]::Empty)
                     }
-                    
+
                     $networkInfo += "$($adapter.Name): $speed Mbps"
                 }
 
@@ -215,7 +215,7 @@ $jobScripts = @{
 
         # Now use the function
         $info = Get-SystemHardwareInfo
-        
+
         Write-Host ""
         Write-Host "Screen Size: " -NoNewline -ForegroundColor White
         Write-Host $($info.ScreenSizeInches) -ForegroundColor Yellow
@@ -377,7 +377,7 @@ if ($settingsResponse -match "^[Yy]$") {
     Write-Host "Opening settings..." -ForegroundColor Yellow
     # Open printer settings
     Start-Process "cmd" -ArgumentList "/c start /min explorer.exe ms-settings:printers"
-    
+
     # Delay Windows Update settings by 10 seconds and open in new window
     Write-Host "Windows Update settings will open in 10 seconds..." -ForegroundColor Yellow
     Start-Sleep -Seconds 10
