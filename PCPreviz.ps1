@@ -16,8 +16,10 @@ try {
     Pause
 }
 
-# Create a hashtable to store our jobs
+# Create a hashtable to store our jobs and their output
 $jobs = @{}
+$outputOrder = @('SystemInfo', 'HardwareInfo', 'AudioDevices', 'WebcamCheck', 'StorageInfo', 'ProblemsCheck')
+$jobOutput = @{}
 
 # Start System Information Job
 $jobs.SystemInfo = Start-Job -ScriptBlock {
@@ -196,8 +198,11 @@ $jobs.HardwareInfo = Start-Job -ScriptBlock {
 # Start Audio Devices Job
 $jobs.AudioDevices = Start-Job -ScriptBlock {
     Write-Host "`n================ Audio Devices ================" -ForegroundColor Cyan
-    Write-Host "Speakers: " -ForegroundColor White -NoNewline
-    (Get-CimInstance Win32_SoundDevice | Where-Object { $_.Status -eq "OK" }).Name
+    Write-Host "Audio Devices:" -ForegroundColor White
+    $audioDevices = Get-CimInstance Win32_SoundDevice | Where-Object { $_.Status -eq "OK" }
+    foreach ($device in $audioDevices) {
+        Write-Host "  $($device.Name)" -ForegroundColor Yellow
+    }
 }
 
 # Start Webcam Check Job
@@ -302,8 +307,16 @@ $jobs.ProblemsCheck = Start-Job -ScriptBlock {
     }
 }
 
-# Wait for all jobs to complete and display their output
-$jobs.Values | Wait-Job | Receive-Job
+# Wait for all jobs to complete and store their output
+foreach ($jobName in $outputOrder) {
+    $jobs[$jobName] | Wait-Job | Out-Null
+    $jobOutput[$jobName] = $jobs[$jobName] | Receive-Job
+}
+
+# Display output in the correct order
+foreach ($jobName in $outputOrder) {
+    $jobOutput[$jobName]
+}
 
 # Clean up jobs
 $jobs.Values | Remove-Job
