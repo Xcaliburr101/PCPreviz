@@ -13,10 +13,28 @@ try {
 } catch {
     Write-Host "Warning: Could not set execution policy. You may need to run PowerShell as Administrator" -ForegroundColor Yellow
     Write-Host "You can try running: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force" -ForegroundColor Yellow
-    Write-Host "Press any key to continue anyway..."
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    Pause
 }
 
+
+# Get System Information 
+Write-Host "`n================ System Information ================" -ForegroundColor Cyan
+Write-Host "System Model: " -NoNewline -ForegroundColor White; Write-Host (Get-CimInstance -ClassName Win32_ComputerSystem).Model -ForegroundColor Yellow
+Write-Host "Serial Number: " -NoNewline -ForegroundColor White; Write-Host (Get-CimInstance -ClassName Win32_BIOS).SerialNumber -ForegroundColor Yellow
+try {
+    if (Confirm-SecureBootUEFI) {
+        Write-Host "Secure Boot: " -NoNewline -ForegroundColor White; Write-Host "True" -ForegroundColor Green
+    } else {
+        Write-Host "Secure Boot: " -NoNewline -ForegroundColor White; Write-Host "Not in Secure Boot" -ForegroundColor Red
+    }
+} catch {
+    Write-Host "Secure Boot: needs admin rights" -ForegroundColor Red
+}
+try {
+    Write-Host "TPM Status: " -NoNewline -ForegroundColor White; Write-Host (Get-WmiObject -Namespace "Root\CIMv2\Security\MicrosoftTpm" -Class Win32_Tpm -ErrorAction Stop).IsEnabled_InitialValue -ForegroundColor Yellow
+} catch {
+    Write-Host "Needs admin rights" -ForegroundColor Red
+}
 
 # Function to get system hardware information with robust fallback.
 function Get-SystemHardwareInfo {
@@ -73,78 +91,6 @@ function Get-SystemHardwareInfo {
     }
 
 
-    # --- Retrieve Microphone Information with multiple fallback methods ---
-    try {
-        $microphoneFound = $false
-        
-        # Method 1: Check using Win32_PnPEntity
-        if (-not $microphoneFound) {
-            $mic = Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction Stop |
-                   Where-Object { $_.Name -match "Microphone|mic" -or $_.PNPClass -eq "AudioEndpoint" } |
-                   Select-Object -First 1
-            if ($mic) {
-                $systemInfo.MicrophoneDetection = $mic.Name
-                $microphoneFound = $true
-            }
-        }
-
-        # Method 2: Check using Win32_SoundDevice
-        if (-not $microphoneFound) {
-            $mic = Get-CimInstance -ClassName Win32_SoundDevice -ErrorAction Stop |
-                   Where-Object { $_.Name -match "Microphone|mic" } |
-                   Select-Object -First 1
-            if ($mic) {
-                $systemInfo.MicrophoneDetection = $mic.Name
-                $microphoneFound = $true
-            }
-        }
-
-        # Method 3: Check using MMDevice API (Windows Audio API)
-        if (-not $microphoneFound) {
-            Add-Type -TypeDefinition @"
-                using System.Runtime.InteropServices;
-                [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-                internal interface IMMDeviceEnumerator {
-                    int NotImpl1();
-                    int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppDevice);
-                }
-                [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-                internal interface IMMDevice {
-                    int Activate(ref Guid iid, int dwClsCtx, int pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
-                }
-                public class MMDeviceEnumeratorComObject {
-                    public static Guid CLSID_MMDeviceEnumerator = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
-                    public static Guid IID_IMMDeviceEnumerator = new Guid("A95664D2-9614-4F35-A746-DE8DB63617E6");
-                }
-"@
-
- $type = [Type]::GetTypeFromCLSID([MMDeviceEnumeratorComObject]::CLSID_MMDeviceEnumerator)
- $enumerator = [Activator]::CreateInstance($type)
- # $guid = [MMDeviceEnumeratorComObject]::IID_IMMDeviceEnumerator
- # Get the COM interface and store it in realEnumerator
- $realEnumerator = [System.Runtime.InteropServices.Marshal]::GetComInterfaceForObject($enumerator, [IMMDeviceEnumerator])
- 
- $device = $null
- # eCapture = 1, eRender = 0, eAll = 2
- # eConsole = 0, eMultimedia = 1, eCommunications = 2
- # Use realEnumerator to get the default audio endpoint
- $result = $realEnumerator.GetDefaultAudioEndpoint(1, 0, [ref]$device)
-
-            
-            if ($result -eq 0 -and $device) {
-                $systemInfo.MicrophoneDetection = "Default Microphone Device Found"
-                $microphoneFound = $true
-            }
-        }
-
-        if (-not $microphoneFound) {
-            $systemInfo.MicrophoneDetection = "Not Detected"
-        }
-    }
-    catch {
-        Write-Verbose "All microphone detection methods failed: $_"
-        $systemInfo.MicrophoneDetection = "Detection Failed"
-    }
 
     # --- Retrieve Screen Size in Inches ---
     # Primary method: use WmiMonitorBasicDisplayParams from root\wmi
@@ -285,26 +231,6 @@ function Get-SystemHardwareInfo {
 $info = Get-SystemHardwareInfo
 
 
-
-# Get System Information 
-Write-Host "`n================ System Information ================" -ForegroundColor Cyan
-Write-Host "System Model: " -NoNewline -ForegroundColor White; Write-Host (Get-CimInstance -ClassName Win32_ComputerSystem).Model -ForegroundColor Yellow
-Write-Host "Serial Number: " -NoNewline -ForegroundColor White; Write-Host (Get-CimInstance -ClassName Win32_BIOS).SerialNumber -ForegroundColor Yellow
-try {
-    if (Confirm-SecureBootUEFI) {
-        Write-Host "Secure Boot: " -NoNewline -ForegroundColor White; Write-Host "True" -ForegroundColor Green
-    } else {
-        Write-Host "Secure Boot: " -NoNewline -ForegroundColor White; Write-Host "Not in Secure Boot" -ForegroundColor Red
-    }
-} catch {
-    Write-Host "Secure Boot: needs admin rights" -ForegroundColor Red
-}
-try {
-    Write-Host "TPM Status: " -NoNewline -ForegroundColor White; Write-Host (Get-WmiObject -Namespace "Root\CIMv2\Security\MicrosoftTpm" -Class Win32_Tpm -ErrorAction Stop).IsEnabled_InitialValue -ForegroundColor Yellow
-} catch {
-    Write-Host "Needs admin rights" -ForegroundColor Red
-}
-
 Write-Host ""
 Write-Host "Screen Size: " -NoNewline -ForegroundColor White; Write-Host $($info.ScreenSizeInches) -ForegroundColor Yellow
 Write-Host "Processor: " -NoNewline -ForegroundColor White; Write-Host $($info.Processor) -ForegroundColor Yellow
@@ -313,7 +239,86 @@ Write-Host "Network Link Speed: " -NoNewline -ForegroundColor White; Write-Host 
 # Check Default Audio Devices 
 Write-Host "`n================ Audio Devices ================" -ForegroundColor Cyan
 Write-Host "Speakers: " -ForegroundColor White -NoNewline; (Get-CimInstance Win32_SoundDevice | Where-Object { $_.Status -eq "OK" }).Name
-Write-Host "Microphone Detection: " -NoNewline -ForegroundColor White; Write-Host $($info.MicrophoneDetection) -ForegroundColor Yellow
+    # --- Retrieve Microphone Information with multiple fallback methods ---
+    try {
+        $microphoneFound = $false
+        
+        # Method 1: Check using Win32_PnPEntity
+        if (-not $microphoneFound) {
+            $mic = Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction Stop |
+                   Where-Object { $_.Name -match "Microphone|mic" -or $_.PNPClass -eq "AudioEndpoint" } |
+                   Select-Object -First 1
+            if ($mic) {
+                $systemInfo.MicrophoneDetection = $mic.Name
+                $microphoneFound = $true
+            }
+        }
+
+        # Method 2: Check using Win32_SoundDevice
+        if (-not $microphoneFound) {
+            $mic = Get-CimInstance -ClassName Win32_SoundDevice -ErrorAction Stop |
+                   Where-Object { $_.Name -match "Microphone|mic" } |
+                   Select-Object -First 1
+            if ($mic) {
+                $systemInfo.MicrophoneDetection = $mic.Name
+                $microphoneFound = $true
+            }
+        }
+
+        # Method 3: Check using MMDevice API (Windows Audio API)
+        if (-not $microphoneFound) {
+            Add-Type -TypeDefinition @"
+                using System.Runtime.InteropServices;
+                [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+                internal interface IMMDeviceEnumerator {
+                    int NotImpl1();
+                    int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppDevice);
+                }
+                [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+                internal interface IMMDevice {
+                    int Activate(ref Guid iid, int dwClsCtx, int pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
+                }
+                public class MMDeviceEnumeratorComObject {
+                    public static Guid CLSID_MMDeviceEnumerator = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
+                    public static Guid IID_IMMDeviceEnumerator = new Guid("A95664D2-9614-4F35-A746-DE8DB63617E6");
+                }
+"@
+
+ $type = [Type]::GetTypeFromCLSID([MMDeviceEnumeratorComObject]::CLSID_MMDeviceEnumerator)
+ $enumerator = [Activator]::CreateInstance($type)
+ # $guid = [MMDeviceEnumeratorComObject]::IID_IMMDeviceEnumerator
+ # Get the COM interface and store it in realEnumerator
+ $realEnumerator = [System.Runtime.InteropServices.Marshal]::GetComInterfaceForObject($enumerator, [IMMDeviceEnumerator])
+ 
+ $device = $null
+ # eCapture = 1, eRender = 0, eAll = 2
+ # eConsole = 0, eMultimedia = 1, eCommunications = 2
+ # Use realEnumerator to get the default audio endpoint
+ $result = $realEnumerator.GetDefaultAudioEndpoint(1, 0, [ref]$device)
+
+            
+            if ($result -eq 0 -and $device) {
+                $systemInfo.MicrophoneDetection = "Default Microphone Device Found"
+                $microphoneFound = $true
+            }
+        }
+
+        if (-not $microphoneFound) {
+            $systemInfo.MicrophoneDetection = "Not Detected"
+        }
+    }
+    catch {
+        Write-Verbose "All microphone detection methods failed: $_"
+        $systemInfo.MicrophoneDetection = "Detection Failed"
+    }
+
+
+# Check Webcam (Function 9)
+Write-Host "`n================ Webcam Check ================" -ForegroundColor Cyan
+Write-Host "Webcam Device: " -NoNewline -ForegroundColor White; Write-Host (Get-PnpDevice -Class Camera | Select-Object -ExpandProperty Name) -ForegroundColor Yellow
+
+
+
 
 # Check Storage Devices
 Write-Host "`n================ Storage Device Information ================" -ForegroundColor Cyan
@@ -366,10 +371,6 @@ foreach ($Disk in $StorageInfo) {
     Write-Host "  Interface: " -NoNewline -ForegroundColor White; Write-Host $Disk.'Interface Type' -ForegroundColor Yellow
     Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
 }
-
-# Check Webcam (Function 9)
-Write-Host "`n================ Webcam Check ================" -ForegroundColor Cyan
-Write-Host "Webcam Device: " -NoNewline -ForegroundColor White; Write-Host (Get-PnpDevice -Class Camera | Select-Object -ExpandProperty Name) -ForegroundColor Yellow
 
 Write-Host "`n================ Problems ================" -ForegroundColor Cyan
 
