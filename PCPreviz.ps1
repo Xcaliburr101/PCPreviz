@@ -30,8 +30,6 @@ Write-Host "
 # Create a hashtable to store our jobs and their output
 $jobs = @{}
 $outputOrder = @(
-    'SystemInfo.Model', 
-    'SystemInfo.Serial', 
     'SystemInfo.SecureBoot', 
     'SystemInfo.TPM', 
     'HardwareInfo', 
@@ -42,43 +40,40 @@ $outputOrder = @(
 )
 $jobOutput = @{}
 
-# Start System Model Job
-$jobs['SystemInfo.Model'] = Start-Job -ScriptBlock {
-    Write-Host "`n================ System Information ================" -ForegroundColor Cyan
-    Write-Host "System Model: " -NoNewline -ForegroundColor White
-    Write-Host (Get-CimInstance -ClassName Win32_ComputerSystem).Model -ForegroundColor Yellow
-}
-
-# Start Serial Number Job
-$jobs['SystemInfo.Serial'] = Start-Job -ScriptBlock {
-    Write-Host "Serial Number: " -NoNewline -ForegroundColor White
-    Write-Host (Get-CimInstance -ClassName Win32_BIOS).SerialNumber -ForegroundColor Yellow
-}
+# Display System Information header and immediate info
+Write-Host "`n================ System Information ================" -ForegroundColor Cyan
+Write-Host "System Model: " -NoNewline -ForegroundColor White
+Write-Host (Get-CimInstance -ClassName Win32_ComputerSystem).Model -ForegroundColor Yellow
+Write-Host "Serial Number: " -NoNewline -ForegroundColor White
+Write-Host (Get-CimInstance -ClassName Win32_BIOS).SerialNumber -ForegroundColor Yellow
 
 # Start Secure Boot Job
 $jobs['SystemInfo.SecureBoot'] = Start-Job -ScriptBlock {
     try {
         if (Confirm-SecureBootUEFI) {
-            Write-Host "Secure Boot: " -NoNewline -ForegroundColor White
-            Write-Host "True" -ForegroundColor Green
+            "True"
         } else {
-            Write-Host "Secure Boot: " -NoNewline -ForegroundColor White
-            Write-Host "Not in Secure Boot" -ForegroundColor Red
+            "Not in Secure Boot"
         }
     } catch {
-        Write-Host "Secure Boot: needs admin rights" -ForegroundColor Red
+        "needs admin rights"
     }
 }
 
 # Start TPM Status Job
 $jobs['SystemInfo.TPM'] = Start-Job -ScriptBlock {
     try {
-        Write-Host "TPM Status: " -NoNewline -ForegroundColor White
-        Write-Host (Get-WmiObject -Namespace "Root\CIMv2\Security\MicrosoftTpm" -Class Win32_Tpm -ErrorAction Stop).IsEnabled_InitialValue -ForegroundColor Yellow
+        (Get-WmiObject -Namespace "Root\CIMv2\Security\MicrosoftTpm" -Class Win32_Tpm -ErrorAction Stop).IsEnabled_InitialValue
     } catch {
-        Write-Host "Needs admin rights" -ForegroundColor Red
+        "needs admin rights"
     }
 }
+
+# Print placeholders for SecureBoot and TPM
+Write-Host "Secure Boot: " -NoNewline -ForegroundColor White
+Write-Host "Checking..." -ForegroundColor Yellow
+Write-Host "TPM Status: " -NoNewline -ForegroundColor White
+Write-Host "Checking..." -ForegroundColor Yellow
 
 # Start Hardware Info Job
 $jobs.HardwareInfo = Start-Job -ScriptBlock {
@@ -340,6 +335,36 @@ $jobs.ProblemsCheck = Start-Job -ScriptBlock {
     }
 }
 
+# Create a timer job to check and update SecureBoot and TPM status
+$timer = Start-Job -ScriptBlock {
+    param($secureBoot, $tpm)
+    
+    $results = @{}
+    while ($true) {
+        if (-not $results.ContainsKey('SecureBoot') -and ($secureBoot.State -eq 'Completed')) {
+            $results['SecureBoot'] = $secureBoot | Receive-Job
+            $color = if ($results['SecureBoot'] -eq 'True') { 'Green' } else { 'Red' }
+            $host.UI.WriteErrorLine("`rSecure Boot: $($results['SecureBoot'])")  # Using WriteErrorLine to ensure it appears
+        }
+        
+        if (-not $results.ContainsKey('TPM') -and ($tpm.State -eq 'Completed')) {
+            $results['TPM'] = $tpm | Receive-Job
+            $host.UI.WriteErrorLine("`rTPM Status: $($results['TPM'])")  # Using WriteErrorLine to ensure it appears
+        }
+        
+        if ($results.Count -eq 2) { break }
+        Start-Sleep -Milliseconds 100
+    }
+} -ArgumentList ($jobs['SystemInfo.SecureBoot']), ($jobs['SystemInfo.TPM'])
+
+# Remove SecureBoot and TPM from outputOrder since they're handled separately
+$outputOrder = @(
+    'HardwareInfo', 
+    'AudioDevices', 
+    'WebcamCheck', 
+    'StorageInfo', 
+    'ProblemsCheck'
+)
 
 # Wait for all jobs to complete and store their output
 foreach ($jobName in $outputOrder) {
