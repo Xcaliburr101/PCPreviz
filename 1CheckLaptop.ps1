@@ -120,7 +120,7 @@ function Get-SystemHardwareInfo {
 
  $type = [Type]::GetTypeFromCLSID([MMDeviceEnumeratorComObject]::CLSID_MMDeviceEnumerator)
  $enumerator = [Activator]::CreateInstance($type)
- #$guid = [MMDeviceEnumeratorComObject]::IID_IMMDeviceEnumerator
+ # $guid = [MMDeviceEnumeratorComObject]::IID_IMMDeviceEnumerator
  # Get the COM interface and store it in realEnumerator
  $realEnumerator = [System.Runtime.InteropServices.Marshal]::GetComInterfaceForObject($enumerator, [IMMDeviceEnumerator])
  
@@ -411,7 +411,30 @@ if ($problematicDevices) {
     Write-Host "All devices are functioning properly" -ForegroundColor Green
 }
 #ask for Wait-FsrmFileManagementJob
+
+# Generate battery report
+Write-Host "Generating battery report..." -ForegroundColor Yellow
+$reportPath = "C:\battery-report.html"
+
+try {
+    # Generate the battery report
+    powercfg /batteryreport /output $reportPath
+    
+    if (Test-Path $reportPath) {
+        Write-Host "Battery report generated successfully at: $reportPath" -ForegroundColor Green
+        # Open the report in default browser
+        Start-Process $reportPath
+    } else {
+        Write-Host "Battery report file not found after generation" -ForegroundColor Red
+    }
+} catch {
+    Write-Host "Failed to generate battery report: $_" -ForegroundColor Red
+}
+
+Write-Host "----------------------------------------" -ForegroundColor DarkGray
+
 Write-Host "`n================ Research ================" -ForegroundColor Cyan
+
 
 
 # Ask user if they want to Google the hard drive model on SmartHDD.com
