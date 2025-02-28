@@ -1,6 +1,9 @@
 # Clear the screen
 Clear-Host
 
+# Start the timer
+$startTime = Get-Date
+
 # Replace the current execution policy handling at the start of the file with:
 try {
     # Check current execution policy
@@ -13,19 +16,19 @@ try {
 } catch {
     Write-Host "Warning: Could not set execution policy. You may need to run PowerShell as Administrator" -ForegroundColor Yellow
     Write-Host "You can try running: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force" -ForegroundColor Yellow
+    # Calculate elapsed time before first pause
     Pause
 }
 
-Write-Host "
-.--------------------------------------------.
-| _____   _____ _____                _ ______|
-||  __ \ / ____|  __ \              (_)___  /|
-|| |__) | |    | |__) | __ _____   ___   / / |
-||  ___/| |    |  ___/ '__/ _ \ \ / / | / /  |
-|| |    | |____| |   | | |  __/\ V /| |/ /__ |
-||_|     \_____|_|   |_|  \___| \_/ |_/_____||
-'--------------------------------------------'
-"
+write-host "/==============================================\"
+write-host "|| _____   _____ _____                _ ______||"
+write-host "|||  __ \ / ____|  __ \              (_)___  /||"
+write-host "||| |__) | |    | |__) | __ _____   ___   / / ||"
+write-host "|||  ___/| |    |  ___/ '__/ _ \ \ / / | / /  ||"
+write-host "||| |    | |____| |   | | |  __/\ V /| |/ /__ ||"
+write-host "|||_|     \_____|_|   |_|  \___| \_/ |_/_____|||"
+write-host "\==============================================/"
+
 
 # Create a hashtable to store our jobs
 $jobs = @{}
@@ -54,7 +57,7 @@ function Start-ParallelJobs {
     param (
         [hashtable]$JobScripts
     )
-    
+
     foreach ($job in $JobScripts.GetEnumerator()) {
         Write-Verbose "Starting job: $($job.Key)"
         $jobs[$job.Key] = Start-Job -ScriptBlock $job.Value
@@ -66,7 +69,7 @@ function Wait-JobsInOrder {
     param (
         [string[]]$OrderedJobNames
     )
-    
+
     foreach ($jobName in $OrderedJobNames) {
         Write-Verbose "Waiting for job: $jobName"
         if ($jobs.ContainsKey($jobName)) {
@@ -338,6 +341,12 @@ Start-ParallelJobs -JobScripts $jobScripts
 # Wait for and display results in order
 Wait-JobsInOrder -OrderedJobNames $outputOrder
 
+#time check
+write-host ""
+write-host ""
+$elapsedTime = (Get-Date) - $startTime
+Write-Host "$($elapsedTime.TotalSeconds) seconds" -ForegroundColor Cyan
+
 # Generate battery report
 Write-Host "`n================ Battery Report ================" -ForegroundColor Cyan
 Write-Host "Would you like to generate a battery report? (Y/N): " -NoNewline -ForegroundColor White
@@ -359,10 +368,24 @@ if ($batteryResponse -match "^[Yy]$") {
 
 Write-Host "----------------------------------------" -ForegroundColor DarkGray
 
-#open common tools
-Start-Process "cmd" -ArgumentList "/c start /min explorer.exe ms-settings:printers"
-#Open Windows Update settings in a separate window
-Start-Process "cmd" -ArgumentList "/c start /min explorer.exe ms-settings:windowsupdate"
+
+
+# Ask about opening settings
+Write-Host "`nWould you like to open Printers and Windows Update settings? (Y/N): " -NoNewline -ForegroundColor White
+$settingsResponse = Read-Host
+
+if ($settingsResponse -match "^[Yy]$") {
+    Write-Host "Opening settings..." -ForegroundColor Yellow
+    # Open printer settings
+    Start-Process "cmd" -ArgumentList "/c start /min explorer.exe ms-settings:printers"
+    
+    # Delay Windows Update settings by 10 seconds and open in new window
+    Write-Host "Windows Update settings will open in 10 seconds..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 10
+    Start-Process "explorer.exe" -ArgumentList "ms-settings:windowsupdate"
+} else {
+    Write-Host "Skipping opening settings" -ForegroundColor Yellow
+}
 
 
 
