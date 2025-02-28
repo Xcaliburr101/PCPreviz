@@ -29,16 +29,34 @@ Write-Host "
 
 # Create a hashtable to store our jobs and their output
 $jobs = @{}
-$outputOrder = @('SystemInfo', 'HardwareInfo', 'AudioDevices', 'WebcamCheck', 'StorageInfo', 'ProblemsCheck')
+$outputOrder = @(
+    'SystemInfo.Model', 
+    'SystemInfo.Serial', 
+    'SystemInfo.SecureBoot', 
+    'SystemInfo.TPM', 
+    'HardwareInfo', 
+    'AudioDevices', 
+    'WebcamCheck', 
+    'StorageInfo', 
+    'ProblemsCheck'
+)
 $jobOutput = @{}
 
-# Start System Information Job
-$jobs.SystemInfo = Start-Job -ScriptBlock {
+# Start System Model Job
+$jobs['SystemInfo.Model'] = Start-Job -ScriptBlock {
     Write-Host "`n================ System Information ================" -ForegroundColor Cyan
     Write-Host "System Model: " -NoNewline -ForegroundColor White
     Write-Host (Get-CimInstance -ClassName Win32_ComputerSystem).Model -ForegroundColor Yellow
+}
+
+# Start Serial Number Job
+$jobs['SystemInfo.Serial'] = Start-Job -ScriptBlock {
     Write-Host "Serial Number: " -NoNewline -ForegroundColor White
     Write-Host (Get-CimInstance -ClassName Win32_BIOS).SerialNumber -ForegroundColor Yellow
+}
+
+# Start Secure Boot Job
+$jobs['SystemInfo.SecureBoot'] = Start-Job -ScriptBlock {
     try {
         if (Confirm-SecureBootUEFI) {
             Write-Host "Secure Boot: " -NoNewline -ForegroundColor White
@@ -50,6 +68,10 @@ $jobs.SystemInfo = Start-Job -ScriptBlock {
     } catch {
         Write-Host "Secure Boot: needs admin rights" -ForegroundColor Red
     }
+}
+
+# Start TPM Status Job
+$jobs['SystemInfo.TPM'] = Start-Job -ScriptBlock {
     try {
         Write-Host "TPM Status: " -NoNewline -ForegroundColor White
         Write-Host (Get-WmiObject -Namespace "Root\CIMv2\Security\MicrosoftTpm" -Class Win32_Tpm -ErrorAction Stop).IsEnabled_InitialValue -ForegroundColor Yellow
