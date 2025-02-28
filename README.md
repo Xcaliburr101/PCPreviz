@@ -44,8 +44,15 @@ This PowerShell script is designed to gather and display comprehensive informati
   * Opens the "Printers & scanners" settings page.
   * Attempts to open Device Manager .
 
+<<<<<<< HEAD
 * **BIOS Reboot (Conditional):**
   * If Secure Boot is disabled and the script is run with Administrator rights, it offers to reboot directly into the BIOS/UEFI settings.
+=======
+*   **BIOS Reboot (Conditional):**
+    *   If Secure Boot is disabled and the script is run with Administrator rights, it offers to reboot directly into the BIOS/UEFI settings.
+
+
+>>>>>>> main
 
 ### Prerequisites
 
@@ -56,12 +63,21 @@ This PowerShell script is designed to gather and display comprehensive informati
 1. **Run the Script:**
     * In an *elevated* terminal(ctrl+shift click), type the following command and press Enter:
 
+<<<<<<< HEAD
         ```powershell
         powershell.exe -ExecutionPolicy Bypass -File "D:\Tools\1CheckLaptop.ps1"
         ```
 
 * Or use / modify the shortcut in the repo
 
+=======
+1.  **Run the Script:**
+    *   In an *elevated* terminal(ctrl+shift click), type the following command and press Enter:
+        ```powershell
+        powershell.exe -ExecutionPolicy Bypass -File "D:\Tools\1CheckLaptop.ps1"
+        ```
+*	Or use / modify the shortcut in the repo
+>>>>>>> main
 ---
 
 ## Troubleshooting and Notes
