@@ -120,7 +120,7 @@ function Get-SystemHardwareInfo {
 
  $type = [Type]::GetTypeFromCLSID([MMDeviceEnumeratorComObject]::CLSID_MMDeviceEnumerator)
  $enumerator = [Activator]::CreateInstance($type)
- # $guid = [MMDeviceEnumeratorComObject]::IID_IMMDeviceEnumerator
+ #$guid = [MMDeviceEnumeratorComObject]::IID_IMMDeviceEnumerator
  # Get the COM interface and store it in realEnumerator
  $realEnumerator = [System.Runtime.InteropServices.Marshal]::GetComInterfaceForObject($enumerator, [IMMDeviceEnumerator])
  
@@ -411,31 +411,7 @@ if ($problematicDevices) {
     Write-Host "All devices are functioning properly" -ForegroundColor Green
 }
 #ask for Wait-FsrmFileManagementJob
-
-# Generate battery report
-Write-Host "`n================ Battery Report ================" -ForegroundColor Cyan
-Write-Host "Would you like to generate a battery report? (Y/N): " -NoNewline -ForegroundColor White
-$batteryResponse = Read-Host
-if ($batteryResponse -match "^[Yy]$") {
-    Write-Host "Generating battery report..." -ForegroundColor Yellow
-$reportPath = "C:\battery-report.html"
-    powercfg /batteryreport /output $reportPath
-    if (Test-Path $reportPath) {
-        Write-Host "Battery report generated successfully at: $reportPath" -ForegroundColor Green
-        # Open the report in default browser
-        Start-Process $reportPath
-    } else {
-        Write-Host "Battery report file not found after generation" -ForegroundColor Red
-    }
-} else {
-    Write-Host "Skipping battery report generation" -ForegroundColor Yellow
-}
-
-
-Write-Host "----------------------------------------" -ForegroundColor DarkGray
-
 Write-Host "`n================ Research ================" -ForegroundColor Cyan
-
 
 
 # Ask user if they want to Google the hard drive model on SmartHDD.com
@@ -476,20 +452,7 @@ if (!$isAdmin) {
         $rebootResponse = Read-Host
         if ($rebootResponse -match "^[Yy]$") {
             Write-Host "Rebooting into BIOS..." -ForegroundColor Green
-            try {
-                # Try using shutdown.exe directly
-                shutdown.exe /r /fw /t 0
-            } catch {
-                Write-Host "Failed to reboot: $_" -ForegroundColor Red
-                Write-Host "Trying alternative method..." -ForegroundColor Yellow
-                try {
-                    # Alternative method using WMI
-                    $computer = Get-WmiObject -Class Win32_OperatingSystem
-                    $computer.Win32Shutdown(6)
-                } catch {
-                    Write-Host "Both reboot methods failed. Please restart manually and enter BIOS." -ForegroundColor Red
-                }
-            }
+            Start-Process -FilePath "shutdown.exe" -ArgumentList "/r /fw /t 0"
         } else {
             Write-Host "Skipping BIOS reboot." -ForegroundColor Yellow
         }
