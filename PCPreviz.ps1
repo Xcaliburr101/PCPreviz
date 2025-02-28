@@ -16,7 +16,6 @@ try {
 } catch {
     Write-Host "Warning: Could not set execution policy. You may need to run PowerShell as Administrator" -ForegroundColor Yellow
     Write-Host "You can try running: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force" -ForegroundColor Yellow
-    # Calculate elapsed time before first pause
     Pause
 }
 
