@@ -120,7 +120,7 @@ function Get-SystemHardwareInfo {
 
  $type = [Type]::GetTypeFromCLSID([MMDeviceEnumeratorComObject]::CLSID_MMDeviceEnumerator)
  $enumerator = [Activator]::CreateInstance($type)
- $guid = [MMDeviceEnumeratorComObject]::IID_IMMDeviceEnumerator
+ # $guid = [MMDeviceEnumeratorComObject]::IID_IMMDeviceEnumerator
  # Get the COM interface and store it in realEnumerator
  $realEnumerator = [System.Runtime.InteropServices.Marshal]::GetComInterfaceForObject($enumerator, [IMMDeviceEnumerator])
  
