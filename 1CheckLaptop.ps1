@@ -411,7 +411,31 @@ if ($problematicDevices) {
     Write-Host "All devices are functioning properly" -ForegroundColor Green
 }
 #ask for Wait-FsrmFileManagementJob
+
+# Generate battery report
+Write-Host "`n================ Battery Report ================" -ForegroundColor Cyan
+Write-Host "Would you like to generate a battery report? (Y/N): " -NoNewline -ForegroundColor White
+$batteryResponse = Read-Host
+if ($batteryResponse -match "^[Yy]$") {
+    Write-Host "Generating battery report..." -ForegroundColor Yellow
+$reportPath = "C:\battery-report.html"
+    powercfg /batteryreport /output $reportPath
+    if (Test-Path $reportPath) {
+        Write-Host "Battery report generated successfully at: $reportPath" -ForegroundColor Green
+        # Open the report in default browser
+        Start-Process $reportPath
+    } else {
+        Write-Host "Battery report file not found after generation" -ForegroundColor Red
+    }
+} else {
+    Write-Host "Skipping battery report generation" -ForegroundColor Yellow
+}
+
+
+Write-Host "----------------------------------------" -ForegroundColor DarkGray
+
 Write-Host "`n================ Research ================" -ForegroundColor Cyan
+
 
 
 # Ask user if they want to Google the hard drive model on SmartHDD.com
@@ -474,3 +498,4 @@ if (!$isAdmin) {
 
 # Reset Execution Policy
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Default -Force
+Pause
