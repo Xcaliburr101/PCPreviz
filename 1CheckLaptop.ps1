@@ -452,7 +452,20 @@ if (!$isAdmin) {
         $rebootResponse = Read-Host
         if ($rebootResponse -match "^[Yy]$") {
             Write-Host "Rebooting into BIOS..." -ForegroundColor Green
-            Start-Process -FilePath "shutdown.exe" -ArgumentList "/r /fw /t 0"
+            try {
+                # Try using shutdown.exe directly
+                shutdown.exe /r /fw /t 0
+            } catch {
+                Write-Host "Failed to reboot: $_" -ForegroundColor Red
+                Write-Host "Trying alternative method..." -ForegroundColor Yellow
+                try {
+                    # Alternative method using WMI
+                    $computer = Get-WmiObject -Class Win32_OperatingSystem
+                    $computer.Win32Shutdown(6)
+                } catch {
+                    Write-Host "Both reboot methods failed. Please restart manually and enter BIOS." -ForegroundColor Red
+                }
+            }
         } else {
             Write-Host "Skipping BIOS reboot." -ForegroundColor Yellow
         }
