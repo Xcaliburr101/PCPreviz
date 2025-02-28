@@ -413,13 +413,13 @@ if ($problematicDevices) {
 #ask for Wait-FsrmFileManagementJob
 
 # Generate battery report
-Write-Host "Generating battery report..." -ForegroundColor Yellow
+Write-Host "`n================ Battery Report ================" -ForegroundColor Cyan
+Write-Host "Would you like to generate a battery report? (Y/N): " -NoNewline -ForegroundColor White
+$batteryResponse = Read-Host
+if ($batteryResponse -match "^[Yy]$") {
+    Write-Host "Generating battery report..." -ForegroundColor Yellow
 $reportPath = "C:\battery-report.html"
-
-try {
-    # Generate the battery report
     powercfg /batteryreport /output $reportPath
-    
     if (Test-Path $reportPath) {
         Write-Host "Battery report generated successfully at: $reportPath" -ForegroundColor Green
         # Open the report in default browser
@@ -427,9 +427,10 @@ try {
     } else {
         Write-Host "Battery report file not found after generation" -ForegroundColor Red
     }
-} catch {
-    Write-Host "Failed to generate battery report: $_" -ForegroundColor Red
+} else {
+    Write-Host "Skipping battery report generation" -ForegroundColor Yellow
 }
+
 
 Write-Host "----------------------------------------" -ForegroundColor DarkGray
 
