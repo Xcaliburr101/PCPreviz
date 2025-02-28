@@ -16,6 +16,17 @@ try {
     Pause
 }
 
+Write-Host "
+.--------------------------------------------.
+| _____   _____ _____                _ ______|
+||  __ \ / ____|  __ \              (_)___  /|
+|| |__) | |    | |__) | __ _____   ___   / / |
+||  ___/| |    |  ___/ '__/ _ \ \ / / | / /  |
+|| |    | |____| |   | | |  __/\ V /| |/ /__ |
+||_|     \_____|_|   |_|  \___| \_/ |_/_____||
+'--------------------------------------------'
+"
+
 # Create a hashtable to store our jobs and their output
 $jobs = @{}
 $outputOrder = @('SystemInfo', 'HardwareInfo', 'AudioDevices', 'WebcamCheck', 'StorageInfo', 'ProblemsCheck')
@@ -307,6 +318,7 @@ $jobs.ProblemsCheck = Start-Job -ScriptBlock {
     }
 }
 
+
 # Wait for all jobs to complete and store their output
 foreach ($jobName in $outputOrder) {
     $jobs[$jobName] | Wait-Job | Out-Null
@@ -341,35 +353,6 @@ if ($batteryResponse -match "^[Yy]$") {
 }
 
 Write-Host "----------------------------------------" -ForegroundColor DarkGray
-
-Write-Host "`n================ Research ================" -ForegroundColor Cyan
-
-# Ask user if they want to Google the hard drive model on SmartHDD.com
-foreach ($Disk in $StorageInfo) {
-    if ($Disk.Model -and $Disk.Model -ne "") {
-        Write-Host "`n" -NoNewline
-        Write-Host "Would you like to Google the model $($Disk.Model) on SmartHDD.com? (Y/N): " -NoNewline -ForegroundColor White
-        $response = Read-Host
-        if ($response -match "^[Yy]$") {
-            Add-Type -AssemblyName System.Net
-            $searchQuery = [System.Net.WebUtility]::UrlEncode("site:smarthdd.com $($Disk.Model)")
-            Start-Process -FilePath "https://www.google.com/search?q=$searchQuery"
-            Write-Host "Searching Google for: site:smarthdd.com $($Disk.Model)" -ForegroundColor Green
-        } else {
-            Write-Host "Skipping Google search for: $($Disk.Model)" -ForegroundColor Yellow
-        }
-    }
-}
-pause
-
-Start-Process "cmd" -ArgumentList "/c start /min explorer.exe ms-settings:printers"
-# Open Device Manager (Minimized)
-try {
-    Start-Process "cmd" -ArgumentList "/c start /min mmc devmgmt.msc"
-    Write-Host "Opening Device Manager..."
-} catch {
-    Write-Host "Failed to open Device Manager: $_" -ForegroundColor Red
-}
 
 # Check for admin rights and ask if the user wants to reboot into BIOS, but ONLY if Secure Boot is disabled
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
