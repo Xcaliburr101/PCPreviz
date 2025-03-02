@@ -383,7 +383,7 @@ try {
 }
 
 # Ask about opening settings
-Write-Host "`nWould you like to open Printers and Windows Update settings? (Y/N): " -NoNewline -ForegroundColor White
+Write-Host "`nWould you like to open Printers? (Y/N): " -NoNewline -ForegroundColor White
 $settingsResponse = Read-Host
 
 if ($settingsResponse -match "^[Yy]$") {
@@ -410,4 +410,6 @@ if (!$isAdmin) {
 
 # Reset Execution Policy
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Default -Force
-Pause
+Start-Sleep -Seconds 2
+
+exit
