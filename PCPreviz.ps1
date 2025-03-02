@@ -1,23 +1,15 @@
 # Clear the screen
 Clear-Host
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $isAdmin) {
+    Write-Host "Script is not running as administrator. Requesting elevation..." -ForegroundColor Yellow
+    Start-Process -FilePath PowerShell -Verb RunAs -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`""
+    exit
+}
 
 # Start the timer
 $startTime = Get-Date
-
-# Replace the current execution policy handling at the start of the file with:
-try {
-    # Check current execution policy
-    $currentPolicy = Get-ExecutionPolicy -Scope Process
-    if ($currentPolicy -ne 'Bypass') {
-        # Try to set execution policy
-        Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAction Stop
-        Write-Host "Successfully set execution policy to Bypass for current process" -ForegroundColor Green
-    }
-} catch {
-    Write-Host "Warning: Could not set execution policy. You may need to run PowerShell as Administrator" -ForegroundColor Yellow
-    Write-Host "You can try running: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force" -ForegroundColor Yellow
-    Pause
-}
 
 write-host "/==============================================\"
 write-host "|| _____   _____ _____                _ ______||"
@@ -28,13 +20,23 @@ write-host "||| |    | |____| |   | | |  __/\ V /| |/ /__ ||"
 write-host "|||_|     \_____|_|   |_|  \___| \_/ |_/_____|||"
 write-host "\==============================================/"
 
+if ($isAdmin) {
+    try {
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false | Out-Null
+        Install-module -Name PSWindowsUpdate -Confirm:$false
 
-# Create a hashtable to store our jobs
-$jobs = @{}
-$outputOrder = @('HardwareInfo', 'AudioDevices', 'WebcamCheck', 'StorageInfo', 'ProblemsCheck')
+        # Check for updates and store them
+        Write-Host "`nChecking for Windows Updates..." -ForegroundColor Yellow
+        $updates = start-job -scriptblock {Get-WindowsUpdate}
+
+        
+    } catch {
+        Write-Host "Error installing dependencies: $_" -ForegroundColor Blue
+    }
+}
 
 # Display System Information first (since this is important basic info)
-Write-Host "`n================ System Information ================" -ForegroundColor Cyan
+Write-Host "`n================== System Information ===================" -ForegroundColor Cyan
 Write-Host "System Model: " -NoNewline -ForegroundColor White
 Write-Host (Get-CimInstance -ClassName Win32_ComputerSystem).Model -ForegroundColor Yellow
 Write-Host "Serial Number: " -NoNewline -ForegroundColor White
@@ -51,294 +53,286 @@ try {
     Write-Host "Secure Boot: needs admin rights" -ForegroundColor Red
 }
 
-# Function to start all jobs in parallel
-function Start-ParallelJobs {
-    param (
-        [hashtable]$JobScripts
-    )
-
-    foreach ($job in $JobScripts.GetEnumerator()) {
-        Write-Verbose "Starting job: $($job.Key)"
-        $jobs[$job.Key] = Start-Job -ScriptBlock $job.Value
+# Hardware Info
+function Get-SystemHardwareInfo {
+    # Create a hashtable to store our results.
+    $systemInfo = @{
+        Processor            = "Unknown"
+        ProcessorSpeedMHz    = "Unknown"
+        TotalRAMGB           = "Unknown"
+        MicrophoneDetection  = "Unknown"
+        ScreenSizeInches     = "Unknown"
+        NetworkLinkSpeed     = "Unknown"
     }
-}
 
-# Function to process results in order
-function Wait-JobsInOrder {
-    param (
-        [string[]]$OrderedJobNames
-    )
-
-    foreach ($jobName in $OrderedJobNames) {
-        Write-Verbose "Waiting for job: $jobName"
-        if ($jobs.ContainsKey($jobName)) {
-            $jobs[$jobName] | Wait-Job | Out-Null
-            $jobs[$jobName] | Receive-Job
-            $jobs[$jobName] | Remove-Job
-            $jobs.Remove($jobName)
+    # --- Retrieve Processor Information ---
+    try {
+        $processor = Get-WmiObject -Class Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        if ($processor) {
+            $systemInfo.Processor         = $processor.Name
+            $systemInfo.ProcessorSpeedMHz = $processor.MaxClockSpeed
         }
     }
-}
-
-# Create a hashtable of all job scripts
-$jobScripts = @{
-    'HardwareInfo' = {
-        # Hardware Info job content
-        function Get-SystemHardwareInfo {
-            # Create a hashtable to store our results.
-            $systemInfo = @{
-                Processor            = "Unknown"
-                ProcessorSpeedMHz    = "Unknown"
-                TotalRAMGB           = "Unknown"
-                MicrophoneDetection  = "Unknown"
-                ScreenSizeInches     = "Unknown"
-                NetworkLinkSpeed     = "Unknown"
+    catch {
+        Write-Verbose "WMI query for processor info failed: $_"
+        try {
+            $processor = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
+            if ($processor) {
+                $systemInfo.Processor         = $processor.Name
+                $systemInfo.ProcessorSpeedMHz = $processor.MaxClockSpeed
             }
-
-            # --- Retrieve Processor Information ---
-            try {
-                $processor = Get-WmiObject -Class Win32_Processor -ErrorAction Stop | Select-Object -First 1
-                if ($processor) {
-                    $systemInfo.Processor         = $processor.Name
-                    $systemInfo.ProcessorSpeedMHz = $processor.MaxClockSpeed
-                }
-            }
-            catch {
-                Write-Verbose "WMI query for processor info failed: $_"
-                try {
-                    $processor = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
-                    if ($processor) {
-                        $systemInfo.Processor         = $processor.Name
-                        $systemInfo.ProcessorSpeedMHz = $processor.MaxClockSpeed
-                    }
-                }
-                catch {
-                    Write-Verbose "CIM query for processor info also failed: $_"
-                }
-            }
-
-            # --- Retrieve RAM Information ---
-            try {
-                $cs = Get-WmiObject -Class Win32_ComputerSystem -ErrorAction Stop
-                if ($cs) {
-                    $systemInfo.TotalRAMGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
-                }
-            }
-            catch {
-                Write-Verbose "WMI query for computer system info failed: $_"
-                try {
-                    $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
-                    if ($cs) {
-                        $systemInfo.TotalRAMGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
-                    }
-                }
-                catch {
-                    Write-Verbose "CIM query for computer system info also failed: $_"
-                }
-            }
-
-            # --- Retrieve Microphone Information ---
-            try {
-                $microphoneFound = $false
-
-                # Method 1: Check using Win32_PnPEntity
-                if (-not $microphoneFound) {
-                    $mic = Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction Stop |
-                           Where-Object { $_.Name -match "Microphone|mic" -or $_.PNPClass -eq "AudioEndpoint" } |
-                           Select-Object -First 1
-                    if ($mic) {
-                        $systemInfo.MicrophoneDetection = $mic.Name
-                        $microphoneFound = $true
-                    }
-                }
-
-                if (-not $microphoneFound) {
-                    $systemInfo.MicrophoneDetection = "Not Detected"
-                }
-            }
-            catch {
-                Write-Verbose "Microphone detection failed: $_"
-                $systemInfo.MicrophoneDetection = "Detection Failed"
-            }
-
-            # --- Retrieve Screen Size ---
-            try {
-                $monitorParams = Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams -ErrorAction Stop
-                $found = $false
-                foreach ($monitor in $monitorParams) {
-                    if ($monitor.MaxHorizontalImageSize -gt 0 -and $monitor.MaxVerticalImageSize -gt 0) {
-                        $hInches = $monitor.MaxHorizontalImageSize / 2.54
-                        $vInches = $monitor.MaxVerticalImageSize / 2.54
-                        $diagonalInches = [math]::Round([math]::Sqrt(($hInches * $hInches) + ($vInches * $vInches)), 2)
-                        $systemInfo.ScreenSizeInches = "$diagonalInches inches"
-                        $found = $true
-                        break
-                    }
-                }
-                if (-not $found) {
-                    $systemInfo.ScreenSizeInches = "Unknown"
-                }
-            }
-            catch {
-                $systemInfo.ScreenSizeInches = "Unknown"
-            }
-
-            # --- Retrieve Network Link Speed ---
-            try {
-                $networkAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
-                $networkInfo = @()
-
-                foreach ($adapter in $networkAdapters) {
-                    if ($adapter.InterfaceDescription -match 'Tailscale|VPN|Virtual') { continue }
-
-                    $speed = if ($adapter.LinkSpeed -match 'Gbps') {
-                        [double]($adapter.LinkSpeed -replace '[^0-9.]',[string]::Empty) * 1000
-                    } else {
-                        [double]($adapter.LinkSpeed -replace '[^0-9.]',[string]::Empty)
-                    }
-
-                    $networkInfo += "$($adapter.Name): $speed Mbps"
-                }
-
-                if ($networkInfo.Count -gt 0) {
-                    $systemInfo.NetworkLinkSpeed = $networkInfo -join ' | '
-                } else {
-                    $systemInfo.NetworkLinkSpeed = "No active network connections"
-                }
-            }
-            catch {
-                $systemInfo.NetworkLinkSpeed = "Unknown"
-            }
-
-            return $systemInfo
         }
-
-        # Now use the function
-        $info = Get-SystemHardwareInfo
-
-        Write-Host ""
-        Write-Host "Screen Size: " -NoNewline -ForegroundColor White
-        Write-Host $($info.ScreenSizeInches) -ForegroundColor Yellow
-        Write-Host "Processor: " -NoNewline -ForegroundColor White
-        Write-Host $($info.Processor) -ForegroundColor Yellow
-        Write-Host "Total RAM (GB): " -NoNewline -ForegroundColor White
-        Write-Host $($info.TotalRAMGB) -ForegroundColor Yellow
-        Write-Host "Network Link Speed: " -NoNewline -ForegroundColor White
-        Write-Host $($info.NetworkLinkSpeed) -ForegroundColor Yellow
-        Write-Host "Microphone: " -NoNewline -ForegroundColor White
-        Write-Host $($info.MicrophoneDetection) -ForegroundColor Yellow
-    }
-    'AudioDevices' = {
-        Write-Host "`n================ Audio Devices ================" -ForegroundColor Cyan
-        Write-Host "Audio Devices:" -ForegroundColor White
-        $audioDevices = Get-CimInstance Win32_SoundDevice | Where-Object { $_.Status -eq "OK" }
-        foreach ($device in $audioDevices) {
-            Write-Host "  $($device.Name)" -ForegroundColor Yellow
+        catch {
+            Write-Verbose "CIM query for processor info also failed: $_"
         }
     }
-    'WebcamCheck' = {
-        Write-Host "`n================ Webcam Check ================" -ForegroundColor Cyan
-        Write-Host "Webcam Device: " -NoNewline -ForegroundColor White
-        Write-Host (Get-PnpDevice -Class Camera | Select-Object -ExpandProperty Name) -ForegroundColor Yellow
-    }
-    'StorageInfo' = {
-        Write-Host "`n================ Storage Device Information ================" -ForegroundColor Cyan
-        $DiskDrives = Get-WmiObject -Class Win32_DiskDrive | Where-Object {$_.MediaType -ne "Removable Media"}
-        $PhysicalDisks = Get-PhysicalDisk -ErrorAction SilentlyContinue
 
-        if ($DiskDrives -isnot [array]) { $DiskDrives = @($DiskDrives) }  # Ensure it's always an array
-
-        $StorageInfo = foreach ($Disk in $DiskDrives) {
-            # Find matching physical disk using device ID
-            $PhysicalDisk = $PhysicalDisks | Where-Object { $_.DeviceId -eq $Disk.Index }
-
-            # Determine drive type using PhysicalDisk if available
-            if ($PhysicalDisk) {
-                $DriveType = switch ($PhysicalDisk.MediaType) {
-                    "HDD" { "HDD" }
-                    "SSD" { if ($PhysicalDisk.BusType -eq "NVMe") { "NVMe" } else { "SSD" } }
-                    default { "Unknown" }
-                }
-                $InterfaceType = $PhysicalDisk.BusType
-            }
-            else {
-                # Fallback to Win32_DiskDrive method if Get-PhysicalDisk is unavailable
-                $DriveType = switch ($Disk.BusType) {
-                    17 { "NVMe" }  # BusType 17 = NVMe
-                    7  { "SSD" }   # BusType 7  = SATA (SSD or HDD)
-                    default {
-                        if ($Disk.MediaType -match "Solid state drive") { "SSD" }
-                        elseif ($Disk.MediaType -match "Fixed hard disk") { "HDD" }
-                        else { "Unknown" }
-                    }
-                }
-                $InterfaceType = $Disk.InterfaceType
-            }
-
-            [PSCustomObject]@{
-                "Device" = $Disk.Caption
-                "Model" = $Disk.Model
-                "Type" = $DriveType
-                "Size (GB)" = [Math]::Round($Disk.Size / 1GB)
-                "Interface Type" = $InterfaceType
-            }
-        }
-
-        foreach ($Disk in $StorageInfo) {
-            Write-Host "Device: " -NoNewline -ForegroundColor White; Write-Host $Disk.Device -ForegroundColor Yellow
-            Write-Host "  Model: " -NoNewline -ForegroundColor White; Write-Host $Disk.Model -ForegroundColor Yellow
-            Write-Host "  Type: " -NoNewline -ForegroundColor White; Write-Host $Disk.Type -ForegroundColor Yellow
-            Write-Host "  Size: " -NoNewline -ForegroundColor White; Write-Host "$($Disk.'Size (GB)') GB" -ForegroundColor Yellow
-            Write-Host "  Interface: " -NoNewline -ForegroundColor White; Write-Host $Disk.'Interface Type' -ForegroundColor Yellow
-            Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
+    # --- Retrieve RAM Information ---
+    try {
+        $cs = Get-WmiObject -Class Win32_ComputerSystem -ErrorAction Stop
+        if ($cs) {
+            $systemInfo.TotalRAMGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
         }
     }
-    'ProblemsCheck' = {
-        Write-Host "`n================ Problems ================" -ForegroundColor Cyan
-        # Function to translate ConfigManagerErrorCode to a readable description
-        function Get-ErrorDescription {
-            param ($errorCode)
-            switch ($errorCode) {
-                1 { "This device is not configured correctly." }
-                2 { "Windows cannot load the driver for this device." }
-                3 { "The driver for this device might be corrupted, or your system may be running low on memory or other resources." }
-                10 { "This device cannot start." }
-                18 { "Reinstall the drivers for this device." }
-                22 { "This device is disabled." }
-                28 { "The drivers for this device are not installed." }
-                31 { "This device is not working properly because Windows cannot load the drivers required for this device." }
-                default { "Unknown error." }
+    catch {
+        Write-Verbose "WMI query for computer system info failed: $_"
+        try {
+            $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+            if ($cs) {
+                $systemInfo.TotalRAMGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
+            }
+        }
+        catch {
+            Write-Verbose "CIM query for computer system info also failed: $_"
+        }
+    }
+
+    # --- Retrieve Microphone Information ---
+    try {
+        $microphoneFound = $false
+
+        # Method 1: Check using Win32_PnPEntity
+        if (-not $microphoneFound) {
+            $mic = Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction Stop |
+                   Where-Object { $_.Name -match "Microphone|mic" -or $_.PNPClass -eq "AudioEndpoint" } |
+                   Select-Object -First 1
+            if ($mic) {
+                $systemInfo.MicrophoneDetection = $mic.Name
+                $microphoneFound = $true
             }
         }
 
-        # Retrieve all Plug and Play devices
-        $devices = Get-WmiObject -Class Win32_PnPEntity
+        if (-not $microphoneFound) {
+            $systemInfo.MicrophoneDetection = "Not Detected"
+        }
+    }
+    catch {
+        Write-Verbose "Microphone detection failed: $_"
+        $systemInfo.MicrophoneDetection = "Detection Failed"
+    }
 
-        # Filter devices with a non-zero ConfigManagerErrorCode, excluding code 22 (disabled devices)
-        $problematicDevices = $devices | Where-Object {
-            $_.ConfigManagerErrorCode -ne 0 -and $_.ConfigManagerErrorCode -ne 22
+    # --- Retrieve Screen Size ---
+    try {
+        $monitorParams = Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorBasicDisplayParams -ErrorAction Stop
+        $found = $false
+        foreach ($monitor in $monitorParams) {
+            if ($monitor.MaxHorizontalImageSize -gt 0 -and $monitor.MaxVerticalImageSize -gt 0) {
+                $hInches = $monitor.MaxHorizontalImageSize / 2.54
+                $vInches = $monitor.MaxVerticalImageSize / 2.54
+                $diagonalInches = [math]::Round([math]::Sqrt(($hInches * $hInches) + ($vInches * $vInches)), 2)
+                $systemInfo.ScreenSizeInches = "$diagonalInches inches"
+                $found = $true
+                break
+            }
+        }
+        if (-not $found) {
+            $systemInfo.ScreenSizeInches = "Unknown"
+        }
+    }
+    catch {
+        $systemInfo.ScreenSizeInches = "Unknown"
+    }
+
+    # --- Retrieve Network Link Speed ---
+    try {
+        $networkAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+        $networkInfo = @()
+
+        foreach ($adapter in $networkAdapters) {
+            if ($adapter.InterfaceDescription -match 'Tailscale|VPN|Virtual') { continue }
+
+            $speed = if ($adapter.LinkSpeed -match 'Gbps') {
+                [double]($adapter.LinkSpeed -replace '[^0-9.]',[string]::Empty) * 1000
+            } else {
+                [double]($adapter.LinkSpeed -replace '[^0-9.]',[string]::Empty)
+            }
+
+            $networkInfo += "$($adapter.Name): $speed Mbps"
         }
 
-        # Display the problematic devices
-        if ($problematicDevices) {
-            Write-Host "Devices with driver issues (excluding disabled devices):" -ForegroundColor Yellow
-            $problematicDevices | ForEach-Object {
-                Write-Host "Device: " -NoNewline -ForegroundColor White; Write-Host $($_.Name) -ForegroundColor Yellow
-                Write-Host "Error Code: " -NoNewline -ForegroundColor White; Write-Host $($_.ConfigManagerErrorCode) -ForegroundColor Yellow
-                Write-Host "Error Description: " -NoNewline -ForegroundColor White; Write-Host (Get-ErrorDescription $_.ConfigManagerErrorCode) -ForegroundColor Yellow
-                Write-Host "----------------------------------------" -ForegroundColor DarkGray
-            }
+        if ($networkInfo.Count -gt 0) {
+            $systemInfo.NetworkLinkSpeed = $networkInfo -join ' | '
         } else {
-            Write-Host "All devices are functioning properly" -ForegroundColor Green
+            $systemInfo.NetworkLinkSpeed = "No active network connections"
         }
+    }
+    catch {
+        $systemInfo.NetworkLinkSpeed = "Unknown"
+    }
+
+    return $systemInfo
+}
+
+# Now use the function and display hardware info
+$info = Get-SystemHardwareInfo
+Write-Host ""
+Write-Host "Screen Size: " -NoNewline -ForegroundColor White
+Write-Host $($info.ScreenSizeInches) -ForegroundColor Yellow
+Write-Host "Processor: " -NoNewline -ForegroundColor White
+Write-Host $($info.Processor) -ForegroundColor Yellow
+Write-Host "Total RAM (GB): " -NoNewline -ForegroundColor White
+Write-Host $($info.TotalRAMGB) -ForegroundColor Yellow
+Write-Host "Network Link Speed: " -NoNewline -ForegroundColor White
+Write-Host $($info.NetworkLinkSpeed) -ForegroundColor Yellow
+Write-Host "Microphone: " -NoNewline -ForegroundColor White
+Write-Host $($info.MicrophoneDetection) -ForegroundColor Yellow
+
+# Audio Devices
+Write-Host "`n===================== Audio Devices ======================" -ForegroundColor Cyan
+Write-Host "Audio Devices:" -ForegroundColor White
+$audioDevices = Get-CimInstance Win32_SoundDevice | Where-Object { $_.Status -eq "OK" }
+foreach ($device in $audioDevices) {
+    Write-Host "  $($device.Name)" -ForegroundColor Yellow
+}
+
+# Webcam Check
+Write-Host "`n====================== Webcam Check =======================" -ForegroundColor Cyan
+Write-Host "Webcam Device: " -NoNewline -ForegroundColor White
+Write-Host (Get-PnpDevice -Class Camera | Select-Object -ExpandProperty Name) -ForegroundColor Yellow
+
+# Storage Info
+
+Write-Host "`n============== Storage Device Information ===============" -ForegroundColor Cyan
+$DiskDrives = Get-WmiObject -Class Win32_DiskDrive | Where-Object {$_.MediaType -ne "Removable Media"}
+$PhysicalDisks = Get-PhysicalDisk -ErrorAction SilentlyContinue
+
+if ($DiskDrives -isnot [array]) { $DiskDrives = @($DiskDrives) }  # Ensure it's always an array
+
+$StorageInfo = foreach ($Disk in $DiskDrives) {
+    # Find matching physical disk using device ID
+    $PhysicalDisk = $PhysicalDisks | Where-Object { $_.DeviceId -eq $Disk.Index }
+
+    # Determine drive type using PhysicalDisk if available
+    if ($PhysicalDisk) {
+        $DriveType = switch ($PhysicalDisk.MediaType) {
+            "HDD" { "HDD" }
+            "SSD" { if ($PhysicalDisk.BusType -eq "NVMe") { "NVMe" } else { "SSD" } }
+            default { "Unknown" }
+        }
+        $InterfaceType = $PhysicalDisk.BusType
+    }
+    else {
+        # Fallback to Win32_DiskDrive method if Get-PhysicalDisk is unavailable
+        $DriveType = switch ($Disk.BusType) {
+            17 { "NVMe" }  # BusType 17 = NVMe
+            7  { "SSD" }   # BusType 7  = SATA (SSD or HDD)
+            default {
+                if ($Disk.MediaType -match "Solid state drive") { "SSD" }
+                elseif ($Disk.MediaType -match "Fixed hard disk") { "HDD" }
+                else { "Unknown" }
+            }
+        }
+        $InterfaceType = $Disk.InterfaceType
+    }
+
+    [PSCustomObject]@{
+        "Device" = $Disk.Caption
+        "Model" = $Disk.Model
+        "Type" = $DriveType
+        "Size (GB)" = [Math]::Round($Disk.Size / 1GB)
+        "Interface Type" = $InterfaceType
     }
 }
 
-# Start all jobs in parallel
-Start-ParallelJobs -JobScripts $jobScripts
+foreach ($Disk in $StorageInfo) {
+    Write-Host "Device: " -NoNewline -ForegroundColor White; Write-Host $Disk.Device -ForegroundColor Yellow
+    Write-Host "  Model: " -NoNewline -ForegroundColor White; Write-Host $Disk.Model -ForegroundColor Yellow
+    Write-Host "  Type: " -NoNewline -ForegroundColor White; Write-Host $Disk.Type -ForegroundColor Yellow
+    Write-Host "  Size: " -NoNewline -ForegroundColor White; Write-Host "$($Disk.'Size (GB)') GB" -ForegroundColor Yellow
+    Write-Host "  Interface: " -NoNewline -ForegroundColor White; Write-Host $Disk.'Interface Type' -ForegroundColor Yellow
+    Write-Host "------------------------------------------------------------" -ForegroundColor DarkGray
+}
 
-# Wait for and display results in order
-Wait-JobsInOrder -OrderedJobNames $outputOrder
+# Problems Check
+# Function to translate ConfigManagerErrorCode to a readable description
+function Get-ErrorDescription {
+    param ($errorCode)
+    switch ($errorCode) {
+        1 { "This device is not configured correctly." }
+        2 { "Windows cannot load the driver for this device." }
+        3 { "The driver for this device might be corrupted, or your system may be running low on memory or other resources." }
+        10 { "This device cannot start." }
+        18 { "Reinstall the drivers for this device." }
+        22 { "This device is disabled." }
+        28 { "The drivers for this device are not installed." }
+        31 { "This device is not working properly because Windows cannot load the drivers required for this device." }
+        default { "Unknown error." }
+    }
+}
+
+# Retrieve all Plug and Play devices
+$devices = Get-WmiObject -Class Win32_PnPEntity
+
+# Filter devices with a non-zero ConfigManagerErrorCode, excluding code 22 (disabled devices)
+$problematicDevices = $devices | Where-Object {
+    $_.ConfigManagerErrorCode -ne 0 -and $_.ConfigManagerErrorCode -ne 22
+}
+write-host "==================Problems==============================" -ForegroundColor Cyan
+# Display the problematic devices
+if ($problematicDevices) {
+    Write-Host "Devices with driver issues (excluding disabled devices):" -ForegroundColor Yellow
+    $problematicDevices | ForEach-Object {
+        Write-Host "Device: " -NoNewline -ForegroundColor White; Write-Host $($_.Name) -ForegroundColor Yellow
+        Write-Host "Error Code: " -NoNewline -ForegroundColor White; Write-Host $($_.ConfigManagerErrorCode) -ForegroundColor Yellow
+        Write-Host "Error Description: " -NoNewline -ForegroundColor White; Write-Host (Get-ErrorDescription $_.ConfigManagerErrorCode) -ForegroundColor Yellow
+        Write-Host "----------------------------------------" -ForegroundColor DarkGray
+    }
+} else {
+    Write-Host "All devices are functioning properly" -ForegroundColor Green
+}
+
+
+write-host ""
+write-host ""
+write-host "==================Windows Updates==============================" -ForegroundColor Cyan
+if ($isAdmin) {
+$null = receive-job -job $updates
+$null = wait-job -job $updates
+$updateResults = Receive-Job -Job $updates
+} else {
+    write-host "Not running as admin, skipping Windows Updates check" -ForegroundColor Yellow
+}  
+
+if ($updateResults) {
+    Write-Host "`nAvailable Windows Updates found:" -ForegroundColor Green
+    foreach ($update in $updateResults) {
+        Write-Host "  - $($update.Title)" -ForegroundColor White
+    }
+} else {
+    Write-Host "`nNo Windows Updates available." -ForegroundColor Green
+}
+
+# Ask user if they want to install updates
+if ($updateResults) {
+    Write-Host "`nWould you like to install these updates now? (Y/N): " -NoNewline -ForegroundColor White
+    $installResponse = Read-Host
+    if ($installResponse -match "^[Yy]$") {
+        Write-Host "Installing available updates..." -ForegroundColor Yellow
+        Install-WindowsUpdate
+    } else {
+        Write-Host "Skipping Windows Updates installation." -ForegroundColor Yellow
+    }
+}
 
 #time check
 write-host ""
@@ -347,7 +341,7 @@ $elapsedTime = (Get-Date) - $startTime
 Write-Host "$($elapsedTime.TotalSeconds) seconds" -ForegroundColor Cyan
 
 # Generate battery report
-Write-Host "`n================ Battery Report ================" -ForegroundColor Cyan
+Write-Host "`n====================== Battery Report =======================" -ForegroundColor Cyan
 Write-Host "Would you like to generate a battery report? (Y/N): " -NoNewline -ForegroundColor White
 $batteryResponse = Read-Host
 if ($batteryResponse -match "^[Yy]$") {
@@ -367,8 +361,6 @@ if ($batteryResponse -match "^[Yy]$") {
 
 Write-Host "----------------------------------------" -ForegroundColor DarkGray
 
-
-
 # Ask about opening settings
 Write-Host "`nWould you like to open Printers and Windows Update settings? (Y/N): " -NoNewline -ForegroundColor White
 $settingsResponse = Read-Host
@@ -386,11 +378,7 @@ if ($settingsResponse -match "^[Yy]$") {
     Write-Host "Skipping opening settings" -ForegroundColor Yellow
 }
 
-
-
 # Check for admin rights and ask if the user wants to reboot into BIOS, but ONLY if Secure Boot is disabled
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
 if (!$isAdmin) {
     Write-Host "`nAdmin rights required to check Secure Boot and reboot to BIOS" -ForegroundColor Red
 } else {
