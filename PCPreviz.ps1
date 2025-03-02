@@ -20,7 +20,7 @@ write-host "||| |    | |____| |   | | |  __/\ V /| |/ /__ ||"
 write-host "|||_|     \_____|_|   |_|  \___| \_/ |_/_____|||"
 write-host "\==============================================/"
 
-if ($isAdmin) {
+if ($isAdmin -and (Test-Connection -ComputerName google.com -Count 1 -Quiet)) {
     try {
         Register-PackageSource -Name "PSGallery" -Location "https://www.powershellgallery.com/api/v2" -ProviderName "PowerShellGet" -Trusted
     } catch {
@@ -35,6 +35,7 @@ if ($isAdmin) {
         Write-Host "`nChecking for Windows Updates..." -ForegroundColor Yellow
         $updates = start-job -scriptblock {Get-WindowsUpdate}
 
+        
     } catch {
         Write-Host "Error installing dependencies: $_" -ForegroundColor Blue
     }
@@ -310,12 +311,12 @@ if ($problematicDevices) {
 write-host ""
 write-host ""
 write-host "==================Windows Updates==============================" -ForegroundColor Cyan
-if ($isAdmin) {
+if ($isAdmin -and (Test-Connection -ComputerName google.com -Count 1 -Quiet)) {
 $null = receive-job -job $updates
-$null = wait-job -job $updates
+$null = wait-job -job $updates -Timeout 10
 $updateResults = Receive-Job -Job $updates
 } else {
-    write-host "Not running as admin, skipping Windows Updates check" -ForegroundColor Yellow
+    write-host "$_" -ForegroundColor Yellow
 }  
 
 if ($updateResults) {
@@ -366,21 +367,36 @@ if ($batteryResponse -match "^[Yy]$") {
 
 Write-Host "----------------------------------------" -ForegroundColor DarkGray
 
+
+#automatic add printers
+Write-Host "`n==================== Printer Discovery =====================" -ForegroundColor Cyan
+Write-Host "Searching for available printers..." -ForegroundColor Yellow
+
+try {
+    Add-Type -AssemblyName System.Printing
+    $printServer = New-Object System.Printing.PrintServer
+    $printers = $printServer.GetPrintQueues()
+    if ($printers) {
+        Write-Host "`nAvailable printers found:" -ForegroundColor Green
+        foreach ($printer in $printers) {
+            Write-Host "  - $($printer.Name) (Network: $($printer.IsNetworkPrinter), Shared: $($printer.IsShared))" -ForegroundColor White
+        }
+        Write-Host "`nPlease go to 'Devices and Printers' in Control Panel or 'Printers & scanners' in Settings to manually add these printers if desired." -ForegroundColor Green
+    } else {
+        Write-Host "`nNo printers found." -ForegroundColor Green
+    }
+} catch {
+    Write-Host "Error discovering printers: $_" -ForegroundColor Red
+}
+
 # Ask about opening settings
-Write-Host "`nWould you like to open Printers and Windows Update settings? (Y/N): " -NoNewline -ForegroundColor White
+Write-Host "`nWould you like to open Printers? (Y/N): " -NoNewline -ForegroundColor White
 $settingsResponse = Read-Host
 
 if ($settingsResponse -match "^[Yy]$") {
     Write-Host "Opening settings..." -ForegroundColor Yellow
     # Open printer settings
     Start-Process "cmd" -ArgumentList "/c start /min explorer.exe ms-settings:printers"
-
-    # Delay Windows Update settings by 10 seconds and open in new window
-    Write-Host "Windows Update settings will open in 10 seconds..." -ForegroundColor Yellow
-    Start-Sleep -Seconds 10
-    Start-Process "explorer.exe" -ArgumentList "ms-settings:windowsupdate"
-} else {
-    Write-Host "Skipping opening settings" -ForegroundColor Yellow
 }
 
 # Check for admin rights and ask if the user wants to reboot into BIOS, but ONLY if Secure Boot is disabled
@@ -414,4 +430,6 @@ if (!$isAdmin) {
 
 # Reset Execution Policy
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Default -Force
-Pause
+Start-Sleep -Seconds 2
+
+exit
