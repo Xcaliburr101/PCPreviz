@@ -1,3 +1,7 @@
+![1000003948](https://github.com/user-attachments/assets/555c3439-58d6-4029-8776-4fbb5efca37c)
+
+---
+
 # LaptopPreviz
 
 ## Description
@@ -9,8 +13,7 @@ This PowerShell script is designed to gather and display comprehensive informati
 * **System Information:**
   * System Model
   * Serial Number
-  * Secure Boot Status (Enabled/Disabled)
-  * TPM (Trusted Platform Module) Status
+  * Secure Boot Status
 
 * **Hardware Information:**
   * Processor Name and Speed
@@ -39,10 +42,7 @@ This PowerShell script is designed to gather and display comprehensive informati
     * Error Code
     * Error Description
 
-* **Research & Utilities:**
-  * Prompts to search for hard drive models on SmartHDD.com via Google.
-  * Opens the "Printers & scanners" settings page.
-  * Attempts to open Device Manager .
+  * Opens the "Printers & scanners"
 
 * **BIOS Reboot (Conditional):**
   * If Secure Boot is disabled and the script is run with Administrator rights, it offers to reboot directly into the BIOS/UEFI settings.
