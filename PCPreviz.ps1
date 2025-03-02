@@ -2,11 +2,11 @@
 Clear-Host
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-if (-not $isAdmin) {
-    Write-Host "Script is not running as administrator. Requesting elevation..." -ForegroundColor Yellow
-    Start-Process -FilePath PowerShell -Verb RunAs -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`""
-    exit
-}
+#if (-not $isAdmin) {
+#    Write-Host "Script is not running as administrator. Requesting elevation..." -ForegroundColor Yellow
+#    Start-Process -FilePath PowerShell -Verb RunAs -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`""
+#    exit
+#}
 
 # Start the timer
 $startTime = Get-Date
@@ -22,14 +22,19 @@ write-host "\==============================================/"
 
 if ($isAdmin) {
     try {
-        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false | Out-Null
+        Register-PackageSource -Name "PSGallery" -Location "https://www.powershellgallery.com/api/v2" -ProviderName "PowerShellGet" -Trusted
+    } catch {
+        write-host "Skipping Package Source Registration"
+    }
+    try {
+       
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false
         Install-module -Name PSWindowsUpdate -Confirm:$false
 
         # Check for updates and store them
         Write-Host "`nChecking for Windows Updates..." -ForegroundColor Yellow
         $updates = start-job -scriptblock {Get-WindowsUpdate}
 
-        
     } catch {
         Write-Host "Error installing dependencies: $_" -ForegroundColor Blue
     }
