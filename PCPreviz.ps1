@@ -2,14 +2,6 @@
 Clear-Host
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-#if (-not $isAdmin) {
-#    Write-Host "Script is not running as administrator. Requesting elevation..." -ForegroundColor Yellow
-#    Start-Process -FilePath PowerShell -Verb RunAs -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`""
-#    exit
-#}
-
-# Start the timer
-$startTime = Get-Date
 
 write-host "/==============================================\"
 write-host "|| _____   _____ _____                _ ______||"
@@ -20,22 +12,56 @@ write-host "||| |    | |____| |   | | |  __/\ V /| |/ /__ ||"
 write-host "|||_|     \_____|_|   |_|  \___| \_/ |_/_____|||"
 write-host "\==============================================/"
 
-if ($isAdmin -and (Test-Connection -ComputerName google.com -Count 1 -Quiet)) {
-    try {
-        Register-PackageSource -Name "PSGallery" -Location "https://www.powershellgallery.com/api/v2" -ProviderName "PowerShellGet" -Trusted
-    } catch {
-        write-host "Skipping Package Source Registration"
+if (-not $isAdmin) {
+    Write-Host "Script is not running as administrator. Some features may be limited." -ForegroundColor Yellow
+    Write-Host "Press enter for fast mode or Y for full mode" -ForegroundColor White
+    $adminResponse = Read-Host
+    #the script will still proceed after user input or Enter.
+    if ($adminResponse -match "^[Yy]$") {
+        Write-Host "Requesting elevation..." -ForegroundColor Yellow
+        Start-Process -FilePath PowerShell -Verb RunAs -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSCommandPath"
+        exit
+    } else {
+        Write-Host "Continuing in non-administrator mode." -ForegroundColor Yellow
     }
+}
+
+# Start the timer
+$startTime = Get-Date
+
+if ($isAdmin) {
     try {
-       
-        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false
-        Install-module -Name PSWindowsUpdate -Confirm:$false
+        Write-Host "Installing dependencies..." -ForegroundColor Yellow
+
+        # Check if PowerShellGet is already installed
+        if (Get-Module -ListAvailable -Name PowerShellGet) {
+            Write-Host "PowerShellGet is already installed." -ForegroundColor Green
+        } else {
+            Write-Host "Installing PowerShellGet..." -ForegroundColor Yellow
+            Install-Module -Name PowerShellGet -Force -AllowClobber
+        }
+
+       ## Check if NuGet is already installed
+       #if (Get-Module -ListAvailable -Name NuGet) {
+       #    Write-Host "NuGet is already installed." -ForegroundColor Green
+       #} else {
+       #    Write-Host "Installing NuGet..." -ForegroundColor Yellow
+       #    Install-Module -Name NuGet -Force -Confirm:$false
+       #}
+
+        # Check if PSWindowsUpdate is already installed
+        if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
+            Write-Host "PSWindowsUpdate is already installed." -ForegroundColor Green
+        } else {
+            Write-Host "Installing PSWindowsUpdate..." -ForegroundColor Yellow
+            Install-Module -Name PSWindowsUpdate -Force -Confirm:$false
+        }
 
         # Check for updates and store them
         Write-Host "`nChecking for Windows Updates..." -ForegroundColor Yellow
         $updates = start-job -scriptblock {Get-WindowsUpdate}
 
-        
+
     } catch {
         Write-Host "Error installing dependencies: $_" -ForegroundColor Blue
     }
@@ -311,13 +337,13 @@ if ($problematicDevices) {
 write-host ""
 write-host ""
 write-host "==================Windows Updates==============================" -ForegroundColor Cyan
-if ($isAdmin -and (Test-Connection -ComputerName google.com -Count 1 -Quiet)) {
+if ($isAdmin) {
 $null = receive-job -job $updates
-$null = wait-job -job $updates -Timeout 10
+$null = wait-job -job $updates -Timeout 60
 $updateResults = Receive-Job -Job $updates
 } else {
     write-host "$_" -ForegroundColor Yellow
-}  
+}
 
 if ($updateResults) {
     Write-Host "`nAvailable Windows Updates found:" -ForegroundColor Green
