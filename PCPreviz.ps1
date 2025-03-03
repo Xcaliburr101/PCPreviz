@@ -346,24 +346,32 @@ $updateResults = Receive-Job -Job $updates
 }
 
 if ($updateResults) {
-    Write-Host "`nAvailable Windows Updates found:" -ForegroundColor Green
-    foreach ($update in $updateResults) {
-        Write-Host "  - $($update.Title)" -ForegroundColor White
+    # Filter updates based on criteria
+    $filteredUpdates = $updateResults | Where-Object {
+        $_.Title -notlike "*cumulatieve update*" -and $_.Size -lt 20GB
+    }
+
+    if ($filteredUpdates) {
+        Write-Host "`nAvailable Windows Updates found (excluding cumulative and >20GB):" -ForegroundColor Green
+        foreach ($update in $filteredUpdates) {
+            Write-Host "  - $($update.Title) (Size: $($update.Size))" -ForegroundColor White
+        }
+
+        # Ask user if they want to install filtered updates
+        Write-Host "`nWould you like to install these updates now? (Y/N): " -NoNewline -ForegroundColor White
+        $installResponse = Read-Host
+        if ($installResponse -match "^[Yy]$") {
+            Write-Host "Installing selected updates..." -ForegroundColor Yellow
+            # Install only the filtered updates
+            $filteredUpdates | ForEach-Object { Install-WindowsUpdate -AcceptAll -UpdateID $_.UpdateID }
+        } else {
+            Write-Host "Skipping Windows Updates installation." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "`nNo applicable Windows Updates found after filtering." -ForegroundColor Green
     }
 } else {
     Write-Host "`nNo Windows Updates available." -ForegroundColor Green
-}
-
-# Ask user if they want to install updates
-if ($updateResults) {
-    Write-Host "`nWould you like to install these updates now? (Y/N): " -NoNewline -ForegroundColor White
-    $installResponse = Read-Host
-    if ($installResponse -match "^[Yy]$") {
-        Write-Host "Installing available updates..." -ForegroundColor Yellow
-        Install-WindowsUpdate
-    } else {
-        Write-Host "Skipping Windows Updates installation." -ForegroundColor Yellow
-    }
 }
 
 #time check
