@@ -366,14 +366,18 @@ if (!$isAdmin) {
             try {
                 # Try using shutdown.exe directly
                 shutdown.exe /r /fw /t 0
-            } catch {
-                Write-Host "Failed to reboot: $_" -ForegroundColor Red
+                Start-Sleep 2 # Wait for shutdown to initiate
+            } catch [Exception] {
+                Write-Host "Failed to reboot using shutdown.exe: $($_.Exception.GetType().FullName)" -ForegroundColor Red
+                Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Red
                 Write-Host "Trying alternative method..." -ForegroundColor Yellow
                 try {
                     # Alternative method using WMI
                     $computer = Get-WmiObject -Class Win32_OperatingSystem
                     $computer.Win32Shutdown(6)
-                } catch {
+                } catch [Exception] {
+                    Write-Host "Failed to reboot using WMI: $($_.Exception.GetType().FullName)" -ForegroundColor Red
+                    Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor Red
                     Write-Host "Both reboot methods failed. Please restart manually and enter BIOS." -ForegroundColor Red
                 }
             }
