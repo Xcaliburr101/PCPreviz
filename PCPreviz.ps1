@@ -29,44 +29,6 @@ if (-not $isAdmin) {
 # Start the timer
 $startTime = Get-Date
 
-if ($isAdmin) {
-    try {
-        Write-Host "Installing dependencies..." -ForegroundColor Yellow
-
-        # Check if PowerShellGet is already installed
-        if (Get-Module -ListAvailable -Name PowerShellGet) {
-            Write-Host "PowerShellGet is already installed." -ForegroundColor Green
-        } else {
-            Write-Host "Installing PowerShellGet..." -ForegroundColor Yellow
-            Install-Module -Name PowerShellGet -Force -AllowClobber
-        }
-
-       ## Check if NuGet is already installed
-       #if (Get-Module -ListAvailable -Name NuGet) {
-       #    Write-Host "NuGet is already installed." -ForegroundColor Green
-       #} else {
-       #    Write-Host "Installing NuGet..." -ForegroundColor Yellow
-       #    Install-Module -Name NuGet -Force -Confirm:$false
-       #}
-
-        # Check if PSWindowsUpdate is already installed
-        if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
-            Write-Host "PSWindowsUpdate is already installed." -ForegroundColor Green
-        } else {
-            Write-Host "Installing PSWindowsUpdate..." -ForegroundColor Yellow
-            Install-Module -Name PSWindowsUpdate -Force -Confirm:$false
-        }
-
-        # Check for updates and store them
-        Write-Host "`nChecking for Windows Updates..." -ForegroundColor Yellow
-        $updates = start-job -scriptblock {Get-WindowsUpdate}
-
-
-    } catch {
-        Write-Host "Error installing dependencies: $_" -ForegroundColor Blue
-    }
-}
-
 # Display System Information first (since this is important basic info)
 Write-Host "`n================== System Information ===================" -ForegroundColor Cyan
 Write-Host "System Model: " -NoNewline -ForegroundColor White
@@ -84,7 +46,7 @@ try {
 } catch {
     Write-Host "Secure Boot: needs admin rights" -ForegroundColor Red
 }
-
+Start-Process explorer.exe "ms-settings:windowsupdate"
 # Hardware Info
 function Get-SystemHardwareInfo {
     # Create a hashtable to store our results.
@@ -331,47 +293,6 @@ if ($problematicDevices) {
     }
 } else {
     Write-Host "All devices are functioning properly" -ForegroundColor Green
-}
-
-
-write-host ""
-write-host ""
-write-host "==================Windows Updates==============================" -ForegroundColor Cyan
-if ($isAdmin) {
-$null = receive-job -job $updates
-$null = wait-job -job $updates -Timeout 60
-$updateResults = Receive-Job -Job $updates
-} else {
-    write-host "$_" -ForegroundColor Yellow
-}
-
-if ($updateResults) {
-    # Filter updates based on criteria
-    $filteredUpdates = $updateResults | Where-Object {
-        $_.Title -notlike "*cumulatieve update*" -and $_.Size -lt 20GB
-    }
-
-    if ($filteredUpdates) {
-        Write-Host "`nAvailable Windows Updates found (excluding cumulative and >20GB):" -ForegroundColor Green
-        foreach ($update in $filteredUpdates) {
-            Write-Host "  - $($update.Title) (Size: $($update.Size))" -ForegroundColor White
-        }
-
-        # Ask user if they want to install filtered updates
-        Write-Host "`nWould you like to install these updates now? (Y/N): " -NoNewline -ForegroundColor White
-        $installResponse = Read-Host
-        if ($installResponse -match "^[Yy]$") {
-            Write-Host "Installing selected updates..." -ForegroundColor Yellow
-            # Install only the filtered updates
-            $filteredUpdates | ForEach-Object { Install-WindowsUpdate -AcceptAll -UpdateID $_.UpdateID }
-        } else {
-            Write-Host "Skipping Windows Updates installation." -ForegroundColor Yellow
-        }
-    } else {
-        Write-Host "`nNo applicable Windows Updates found after filtering." -ForegroundColor Green
-    }
-} else {
-    Write-Host "`nNo Windows Updates available." -ForegroundColor Green
 }
 
 #time check
